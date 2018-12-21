@@ -1,0 +1,2 @@
+# PythonTranslate
+一个用python写的百度翻译api的小软件
