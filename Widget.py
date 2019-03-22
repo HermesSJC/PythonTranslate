@@ -1,20 +1,26 @@
 from PySide2.QtWidgets import QPushButton,QWidget,QGridLayout,QLabel,QLineEdit,QTextEdit,QComboBox,QFileDialog
-from PySide2.QtCore import Qt,QDateTime,Signal
+from PySide2.QtCore import Qt,QDateTime,Signal,QDir
+
+import http.client
+import hashlib
 import json
 import urllib
-from hashlib import md5
-import http.client as httplib
 import random
+
 
 class Widget(QWidget):
     def __init__(self):
 
         QWidget.__init__(self)
 
+        self.__salt = "1466355502"
+
         self.__time = QDateTime()
 
+        self.__currentPath = QDir.currentPath()
+
         self.__appIDLabel = QLabel("AppID:")
-        self.__appIDLineEdit = QLineEdit()
+        self.__appIDLineEdit = QLineEdit("20181213000247661")
 
         self.__keyLabel = QLabel("Key:")
         self.__keyLineEdit = QLineEdit()
@@ -38,9 +44,16 @@ class Widget(QWidget):
         self.__srcTextEdit = QTextEdit()
 
         self.__chooseFileButton = QPushButton("Choose File")
+        self.__chooseFileButton.clicked.connect(self.__on_clicked_chooseFileButton)
+
         self.__translateButton = QPushButton("Translate")
+        self.__translateButton.clicked.connect(self.__on_clicked_translateButton)
+
         self.__clearButton = QPushButton("Clear")
+        self.__clearButton.clicked.connect(self.__on_clicked_clearButton)
+
         self.__historyButton = QPushButton("History")
+        self.__historyButton.clicked.connect(self.__on_clicked_historyButton)
 
         self.__translateLabel = QLabel("Translate Text:")
         self.__translateTextEdit = QTextEdit()
@@ -69,17 +82,60 @@ class Widget(QWidget):
 
         self.show()
 
+
     def __GetCurrentTime(self,format = "hh:mm:ss"):
         return self.__time.currentDateTime().toString(format)
 
     def __on_clicked_chooseFileButton(self):
-        pass
+        filePath = QFileDialog.getOpenFileName(self,"open",self.__currentPath,"* txt")
+        print(filePath)
 
     def __on_clicked_translateButton(self):
-        pass
+
+        srcData = self.__srcTextEdit.toPlainText()
+        if srcData.strip():
+            self.__translateTextEdit.clear()
+            self.__translateTextEdit.document().clear()
+
+            dstData = srcData.replace("\n"," ")
+
+        else:
+            self.__statusLabel = QLabel(self.__GetCurrentTime() + " - There is no data!")
+            return
+
+        appid = self.__appIDLineEdit.text()
+        key = self.__keyLineEdit.text()
+        strFrom = self.__fromComboBox.currentData()
+        strTo = self.__toComboBox.currentData()
+        mymd5 = self.__GetSign(dstData,appid,key)
+
+        myurl = "q=" + dstData + "&from=" + strFrom + "&to=" + strTo + "&appid=" +  appid + "&salt" + self.__salt + "&sign=" + mymd5
+
+        try:
+            httpClient = http.client.HTTPConnection("api.fanyi.baidu.com")
+            httpClient.request("GET",myurl)
+
+            response = httpClient.getresponse()
+            jsonResponse = response.read().decode("utf-8")
+            js = json.load(jsonResponse)
+
+            translate = str(js["trans_result"][0]["dst"])
+
+            print(translate)
+
+        except Exception as e:
+            print("1"+e)
 
     def __on_clicked_clearButton(self):
-        pass
+        self.__srcTextEdit.clear()
+        self.__translateTextEdit.clear()
 
     def __on_clicked_historyButton(self):
         pass
+
+    def __GetSign(self,srcData,appid,key):
+        sign = appid + srcData + self.__salt+ key
+        mymd5 = hashlib.md5(sign.encode()).hexdigest()
+        return mymd5
+
+
