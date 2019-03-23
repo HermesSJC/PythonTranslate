@@ -1,5 +1,5 @@
 from PySide2.QtWidgets import QPushButton,QWidget,QGridLayout,QLabel,QLineEdit,QTextEdit,QComboBox,QFileDialog
-from PySide2.QtCore import Qt,QDateTime,Signal,QDir
+from PySide2.QtCore import Qt,QDateTime,Signal,QDir,QSettings,QFile,QTextStream
 
 import http.client
 import hashlib
@@ -15,15 +15,19 @@ class Widget(QWidget):
 
         self.__salt = "1466355502"
 
+        self.__httpClient = None
+
         self.__time = QDateTime()
 
         self.__currentPath = QDir.currentPath()
 
         self.__appIDLabel = QLabel("AppID:")
-        self.__appIDLineEdit = QLineEdit("20181213000247661")
+        self.__appIDLineEdit = QLineEdit()
+        self.__appIDLineEdit.returnPressed.connect(self.__on_appIDLineEdit_returnPressed)
 
         self.__keyLabel = QLabel("Key:")
         self.__keyLineEdit = QLineEdit()
+        self.__keyLineEdit.returnPressed.connect(self.__on_keyLineEdit_returnPressed)
 
         self.__fromLabel = QLabel("From:")
         self.__fromComboBox = QComboBox()
@@ -41,7 +45,7 @@ class Widget(QWidget):
         self.__toComboBox.setCurrentIndex(1)
 
         self.__srcLabel = QLabel("Src Text:")
-        self.__srcTextEdit = QTextEdit()
+        self.__srcTextEdit = QTextEdit("apple")
 
         self.__chooseFileButton = QPushButton("Choose File")
         self.__chooseFileButton.clicked.connect(self.__on_clicked_chooseFileButton)
@@ -82,6 +86,34 @@ class Widget(QWidget):
 
         self.show()
 
+        iniFile = QFile("info.ini")
+        if iniFile.exists():
+            self.__infoSettings = QSettings("info.ini", QSettings.IniFormat)
+
+            self.__appIDLineEdit.setText(self.__infoSettings.value("info/appid"))
+            self.__keyLineEdit.setText(self.__infoSettings.value("info/key"))
+
+        else:
+            if iniFile.open(QFile.ReadWrite):
+                self.__infoSettings = QSettings("info.ini", QSettings.IniFormat)
+
+                self.__infoSettings.beginGroup("info")
+
+                self.__infoSettings.setValue("appid","00000000000000000")
+                self.__infoSettings.setValue("key","00000000000000000")
+                self.__infoSettings.endGroup()
+
+                iniFile.close()
+
+        self.__historyFile = QFile("history.txt")
+        if self.__historyFile.open(QFile.ReadWrite or QFile.Append):
+            self.__historyFileStream = QTextStream(self.__historyFile)
+
+            self.__historyFileStream << "hello"
+
+    def __del__(self):
+        self.__historyFile.close()
+
 
     def __GetCurrentTime(self,format = "hh:mm:ss"):
         return self.__time.currentDateTime().toString(format)
@@ -103,35 +135,60 @@ class Widget(QWidget):
             self.__statusLabel = QLabel(self.__GetCurrentTime() + " - There is no data!")
             return
 
+        myurl = "/api/trans/vip/translate"
+
         appid = self.__appIDLineEdit.text()
         key = self.__keyLineEdit.text()
         strFrom = self.__fromComboBox.currentData()
         strTo = self.__toComboBox.currentData()
         mymd5 = self.__GetSign(dstData,appid,key)
+        q = self.__srcTextEdit.toPlainText()
 
-        myurl = "q=" + dstData + "&from=" + strFrom + "&to=" + strTo + "&appid=" +  appid + "&salt" + self.__salt + "&sign=" + mymd5
+        myurl = myurl + "?appid=" + appid + "&q=" + urllib.parse.quote(q) + "&from=" + strFrom +"&to=" + strTo + "&salt=" + self.__salt + "&sign=" + mymd5
 
-        try:
-            httpClient = http.client.HTTPConnection("api.fanyi.baidu.com")
-            httpClient.request("GET",myurl)
+        httpClient = http.client.HTTPConnection("api.fanyi.baidu.com")
+        httpClient.request("GET",myurl)
 
-            response = httpClient.getresponse()
-            jsonResponse = response.read().decode("utf-8")
-            js = json.load(jsonResponse)
+        response = httpClient.getresponse()
+        jsonResponse = response.read().decode("utf-8")
 
-            translate = str(js["trans_result"][0]["dst"])
+        js = json.loads(jsonResponse)
+        translate = str(js["trans_result"][0]["dst"])
 
-            print(translate)
-
-        except Exception as e:
-            print("1"+e)
+        self.__translateTextEdit.insertPlainText(translate)
+        self.__historyFileStream << translate + "\r\n"
 
     def __on_clicked_clearButton(self):
         self.__srcTextEdit.clear()
         self.__translateTextEdit.clear()
 
     def __on_clicked_historyButton(self):
-        pass
+        self.__historyFile.close()
+        self.__historyFile.open(QFile.ReadWrite or QFile.Append)
+
+    def __on_appIDLineEdit_returnPressed(self):
+        appid = self.__appIDLineEdit.text()
+        if not appid.strip():
+            self.__statusLabel.setText(self.__GetCurrentTime() + " - There is no appid!")
+            return
+
+        self.__infoSettings.beginGroup("info")
+        self.__infoSettings.setValue("appid",appid)
+        self.__infoSettings.endGroup()
+        self.__statusLabel.setText(self.__GetCurrentTime() + " - Enter AppID successful!!")
+
+
+    def __on_keyLineEdit_returnPressed(self):
+        key = self.__keyLineEdit.text()
+        if not key.strip():
+            self.__statusLabel.setText(self.__GetCurrentTime() + " - There is no key!")
+            return
+
+        self.__infoSettings.beginGroup("info")
+        self.__infoSettings.setValue("key",key)
+        self.__infoSettings.endGroup()
+        self.__statusLabel.setText(self.__GetCurrentTime() + " - Enter key successful!!")
+
 
     def __GetSign(self,srcData,appid,key):
         sign = appid + srcData + self.__salt+ key
