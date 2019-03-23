@@ -45,7 +45,7 @@ class Widget(QWidget):
         self.__toComboBox.setCurrentIndex(1)
 
         self.__srcLabel = QLabel("Src Text:")
-        self.__srcTextEdit = QTextEdit("apple")
+        self.__srcTextEdit = QTextEdit()
 
         self.__chooseFileButton = QPushButton("Choose File")
         self.__chooseFileButton.clicked.connect(self.__on_clicked_chooseFileButton)
@@ -109,7 +109,8 @@ class Widget(QWidget):
         if self.__historyFile.open(QFile.ReadWrite or QFile.Append):
             self.__historyFileStream = QTextStream(self.__historyFile)
 
-            self.__historyFileStream << "hello"
+        else:
+            self.__statusLabel = QLabel(self.__GetCurrentTime() + " - History fie create failed!")
 
     def __del__(self):
         self.__historyFile.close()
@@ -119,8 +120,23 @@ class Widget(QWidget):
         return self.__time.currentDateTime().toString(format)
 
     def __on_clicked_chooseFileButton(self):
+        pass
+        """
         filePath = QFileDialog.getOpenFileName(self,"open",self.__currentPath,"* txt")
-        print(filePath)
+        if filePath.strip():
+            file = QFile(filePath)
+            if file.open(QFile.ReadOnly):
+                self.__srcTextEdit.insertPlainText(file.readAll())
+            else:
+                self.__statusLabel = QLabel(self.__GetCurrentTime() + " - open file failed!")
+
+        else:
+            self.__statusLabel = QLabel(self.__GetCurrentTime() + " - Choose file failed!")
+            return
+        """
+        
+        
+        
 
     def __on_clicked_translateButton(self):
 
@@ -142,9 +158,8 @@ class Widget(QWidget):
         strFrom = self.__fromComboBox.currentData()
         strTo = self.__toComboBox.currentData()
         mymd5 = self.__GetSign(dstData,appid,key)
-        q = self.__srcTextEdit.toPlainText()
 
-        myurl = myurl + "?appid=" + appid + "&q=" + urllib.parse.quote(q) + "&from=" + strFrom +"&to=" + strTo + "&salt=" + self.__salt + "&sign=" + mymd5
+        myurl = myurl + "?appid=" + appid + "&q=" + urllib.parse.quote(srcData) + "&from=" + strFrom +"&to=" + strTo + "&salt=" + self.__salt + "&sign=" + mymd5
 
         httpClient = http.client.HTTPConnection("api.fanyi.baidu.com")
         httpClient.request("GET",myurl)
@@ -158,13 +173,19 @@ class Widget(QWidget):
         self.__translateTextEdit.insertPlainText(translate)
         self.__historyFileStream << translate + "\r\n"
 
+        self.__statusLabel = QLabel(self.__GetCurrentTime() + " - Translate successful!")    
+
     def __on_clicked_clearButton(self):
         self.__srcTextEdit.clear()
         self.__translateTextEdit.clear()
 
+        self.__statusLabel = QLabel(self.__GetCurrentTime() + " - Clear successful!")   
+
     def __on_clicked_historyButton(self):
         self.__historyFile.close()
         self.__historyFile.open(QFile.ReadWrite or QFile.Append)
+
+        self.__statusLabel = QLabel(self.__GetCurrentTime() + " - Save file successful!") 
 
     def __on_appIDLineEdit_returnPressed(self):
         appid = self.__appIDLineEdit.text()
